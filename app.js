@@ -68,7 +68,14 @@ const loginView = document.querySelector("#loginView");
 const studentView = document.querySelector("#studentView");
 const adminView = document.querySelector("#adminView");
 
+const aiModal = document.querySelector("#aiModal");
+const closeAiModalBtn = document.querySelector("#closeAiModalBtn");
+const aiModalBackdrop = document.querySelector("#aiModalBackdrop");
+const aiModalTitle = document.querySelector("#aiModalTitle");
+const aiModalBody = document.querySelector("#aiModalBody");
+
 let currentUser = null;
+let geminiApiKey = "";
 
 loginForm.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -158,10 +165,30 @@ function renderAdminDashboard() {
       </div>
     </div>
 
+    <div class="api-key-panel">
+      <label for="geminiApiKeyInput">Gemini API Key</label>
+      <input type="password" id="geminiApiKeyInput" placeholder="AI 기능 사용을 위한 API 키를 입력하세요" />
+      <span id="apiKeyStatus" class="api-key-status"></span>
+    </div>
+
     <section class="admin-grid" aria-label="전체 학생 정보">
       ${STUDENTS.map(renderStudentCard).join("")}
     </section>
   `;
+
+  const apiKeyInput = adminView.querySelector("#geminiApiKeyInput");
+  const apiKeyStatus = adminView.querySelector("#apiKeyStatus");
+  if (geminiApiKey) apiKeyInput.value = geminiApiKey;
+  if (geminiApiKey) apiKeyStatus.textContent = "✓ 입력됨";
+
+  apiKeyInput.addEventListener("change", (e) => {
+    geminiApiKey = e.target.value.trim();
+    if (geminiApiKey) {
+      apiKeyStatus.textContent = "✓ 입력됨";
+    } else {
+      apiKeyStatus.textContent = "";
+    }
+  });
 
   showOnly(adminView);
   logoutButton.classList.remove("hidden");
@@ -176,6 +203,9 @@ function renderStudentCard(student) {
         <p class="student-number">학번 ${student.id}</p>
         ${renderGrades(student.grades, true, `gradesTitle-${student.id}`)}
         ${renderTraits(student)}
+        <button class="ai-button" onclick="generateAiCounseling('${student.id}')">
+          ✨ AI 상담 전략 생성
+        </button>
       </div>
     </article>
   `;
@@ -212,4 +242,81 @@ function renderTraits(student) {
   `;
 }
 
+// --- AI 기능 관련 로직 ---
+function closeAiModal() {
+  aiModal.classList.add("hidden");
+}
+
+if (closeAiModalBtn) closeAiModalBtn.addEventListener("click", closeAiModal);
+if (aiModalBackdrop) aiModalBackdrop.addEventListener("click", closeAiModal);
+
+async function generateAiCounseling(studentId) {
+  if (!geminiApiKey) {
+    alert("상단 입력란에 Gemini API Key를 먼저 입력해주세요.");
+    return;
+  }
+
+  const student = STUDENTS.find((s) => s.id === studentId);
+  if (!student) return;
+
+  aiModalTitle.textContent = `${student.name} 학생 맞춤 상담 전략`;
+  aiModalBody.innerHTML = `
+    <div class="loader-container">
+      <div class="loader"></div>
+      <p>AI가 맞춤형 상담 전략을 분석하고 있습니다...</p>
+    </div>
+  `;
+  aiModal.classList.remove("hidden");
+
+  const prompt = `
+당신은 학생들의 성장을 돕는 따뜻하고 전문적인 학교 선생님입니다.
+다음 학생의 정보를 바탕으로 효과적인 상담 전략과 대화 시작 멘트를 제안해주세요.
+
+[학생 정보]
+- 이름: ${student.name}
+- 학번: ${student.id}
+- 성적: ${JSON.stringify(student.grades)}
+- 학습 특성: ${student.traits.join(", ")}
+- 교사 메모: ${student.teacherMemo}
+
+[출력 양식]
+1. 칭찬할 점 (학생의 강점)
+2. 개선을 위한 조언 (부드러운 접근법)
+3. 추천 대화 시작 멘트 (실제 학생에게 건넬 따뜻한 멘트)
+`;
+
+  try {
+    const response = await fetch(\`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=\${geminiApiKey}\`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }]
+      })
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error?.message || "API 호출 실패");
+    }
+
+    const aiText = data.candidates[0].content.parts[0].text;
+    
+    // 간단한 마크다운 처리 (bold 및 개행)
+    const formattedText = aiText
+      .replace(/\\*\\*(.*?)\\*\\*/g, '<strong>$1</strong>')
+      .replace(/\\n/g, '<br/>');
+
+    aiModalBody.innerHTML = \`<div class="ai-result">\${formattedText}</div>\`;
+  } catch (error) {
+    aiModalBody.innerHTML = \`
+      <div style="color: var(--danger);">
+        <h3>오류가 발생했습니다.</h3>
+        <p>\${error.message}</p>
+        <p>API 키가 올바른지 다시 확인해주세요.</p>
+      </div>
+    \`;
+  }
+}
+
+// 초기 화면 설정
 showOnly(loginView);
