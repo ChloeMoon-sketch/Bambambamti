@@ -45,7 +45,7 @@ ${teacherConcern}
   try {
     // 내장 fetch를 사용해 Gemini REST API 호출 (SDK 미사용)
     // 보안: API 키는 서버리스 환경 변수로만 접근되므로 프론트엔드에 노출되지 않음
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
